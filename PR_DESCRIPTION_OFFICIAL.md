@@ -78,6 +78,7 @@ The newer **PR #154** provides a much better optimization solution:
 ## Files Changed
 
 - Removed problematic optimizations from `CMakeLists.txt`
+- **Updated version to v0.85.0** to match git tag (was incorrectly set to v0.84.0)
 - Added comprehensive build automation
 - Integrated all features from PRs #150-#160
 - Added performance testing and documentation

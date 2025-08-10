@@ -17,6 +17,7 @@ set_property(CACHE HD_CPU_OPTIMIZATION PROPERTY STRINGS AUTO INTEL AMD GENERIC)
 
 if (MSVC)
     add_definitions(-D_HAS_STD_BYTE=0)
+    if(HD_CPU_OPTIMIZATION STREQUAL "INTEL")
         set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")
         set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /O2")
         message(STATUS "Enabling Intel-optimized build for MSVC")

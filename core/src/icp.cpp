@@ -83,6 +83,8 @@ bool ICP::optimize_source_to_target_wc(PointClouds& point_clouds_container, bool
         pc.compute_normal_vectors(0.5);
     }
     
+    double last_rms = std::numeric_limits<double>::infinity();
+    int no_improve_streak = 0;
     for (size_t iter = 0; iter < number_of_iterations; iter++) {
         std::cout << "ICP iteration: " << iter + 1 << " of " << number_of_iterations << std::endl;
         
@@ -258,7 +260,7 @@ bool ICP::optimize_source_to_target_wc(PointClouds& point_clouds_container, bool
         tripletListP.clear();
         tripletListB.clear();
 
-        Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> solver(AtPA);
+    Eigen::SimplicialCholesky<Eigen::SparseMatrix<double>> solver(AtPA);
         Eigen::SparseMatrix<double> x = solver.solve(AtPB);
 
         std::vector<double> h_x;
@@ -277,14 +279,29 @@ bool ICP::optimize_source_to_target_wc(PointClouds& point_clouds_container, bool
             }
 
             int counter = 0;
+            double max_update_abs = 0.0;
             for (size_t i = 0; i < point_clouds_container.point_clouds.size(); i++) {
                 TaitBryanPose pose = pose_tait_bryan_from_affine_matrix(point_clouds_container.point_clouds[i].m_pose);
-                pose.px += h_x[counter++] * 0.5;
-                pose.py += h_x[counter++] * 0.5;
-                pose.pz += h_x[counter++] * 0.5;
-                pose.om += h_x[counter++] * 0.5;
-                pose.fi += h_x[counter++] * 0.5;
-                pose.ka += h_x[counter++] * 0.5;
+                double du_px = h_x[counter++] * 0.5;
+                double du_py = h_x[counter++] * 0.5;
+                double du_pz = h_x[counter++] * 0.5;
+                double du_om = h_x[counter++] * 0.5;
+                double du_fi = h_x[counter++] * 0.5;
+                double du_ka = h_x[counter++] * 0.5;
+
+                max_update_abs = std::max(max_update_abs, std::abs(du_px));
+                max_update_abs = std::max(max_update_abs, std::abs(du_py));
+                max_update_abs = std::max(max_update_abs, std::abs(du_pz));
+                max_update_abs = std::max(max_update_abs, std::abs(du_om));
+                max_update_abs = std::max(max_update_abs, std::abs(du_fi));
+                max_update_abs = std::max(max_update_abs, std::abs(du_ka));
+
+                pose.px += du_px;
+                pose.py += du_py;
+                pose.pz += du_pz;
+                pose.om += du_om;
+                pose.fi += du_fi;
+                pose.ka += du_ka;
 
                 if (i == 0 && fix_first_node) {
                     continue;
@@ -304,6 +321,40 @@ bool ICP::optimize_source_to_target_wc(PointClouds& point_clouds_container, bool
                     std::cout << "point cloud: " << point_clouds_container.point_clouds[i].file_name << " is fixed" << std::endl;
                 }
             }
+            // compute current RMS from residual vector matB (weighted)
+            // Note: matB contains raw residuals; P are weights. Compute RMS approx as sqrt((r^T P r)/N)
+            Eigen::VectorXd r(matB.rows());
+            for (int k = 0; k < matB.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<double>::InnerIterator it(matB, k); it; ++it) {
+                    r[it.row()] = it.value();
+                }
+            }
+            // Build diagonal weights vector w from matP
+            Eigen::VectorXd w(matP.rows());
+            w.setOnes();
+            for (int k = 0; k < matP.outerSize(); ++k) {
+                for (Eigen::SparseMatrix<double>::InnerIterator it(matP, k); it; ++it) {
+                    if (it.row() == it.col()) w[it.row()] = it.value();
+                }
+            }
+            double weighted_ssr = (r.array().square() * w.array()).sum();
+            double rms = std::sqrt(weighted_ssr / std::max(1, (int)r.size()));
+
+            std::cout << "RMS: " << rms << "  max_update_abs: " << max_update_abs << std::endl;
+
+            bool small_update = (max_update_abs < convergence_epsilon);
+            bool small_improve = (last_rms < std::numeric_limits<double>::infinity()) && ((last_rms - rms) / std::max(1e-12, last_rms) < min_relative_improvement);
+            if (small_improve) {
+                no_improve_streak++;
+            } else {
+                no_improve_streak = 0;
+            }
+
+            if (small_update || no_improve_streak >= max_no_improve_iters) {
+                std::cout << "Early stop: " << (small_update ? "converged on update" : "no significant improvement") << std::endl;
+                break;
+            }
+            last_rms = rms;
         }
         else {
             std::cout << "AtPA=AtPB FAILED" << std::endl;

@@ -33,6 +33,9 @@ public:
 		is_adaptive_robust_kernel = false;
 		is_ballanced_horizontal_vs_vertical = true;
 		barron_c = 1.0;
+		convergence_epsilon = 1e-6;
+		min_relative_improvement = 1e-3; // 0.1% improvement
+		max_no_improve_iters = 2;
 	};
 	~ICP() { ; };
 	 
@@ -75,6 +78,11 @@ public:
 	bool is_rodrigues = false;
 	bool is_lie_algebra_left_jacobian = false;
 	bool is_lie_algebra_right_jacobian = false;
+
+	// Convergence tuning
+	double convergence_epsilon;              // stop if max |update| < epsilon
+	double min_relative_improvement;        // stop if RMS improvement falls below this
+	int    max_no_improve_iters;            // number of consecutive low-improve iterations before stop
 };
 
 #endif

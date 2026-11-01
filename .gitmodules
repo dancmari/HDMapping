@@ -15,7 +15,7 @@
 	url = https://github.com/xioTechnologies/Fusion.git
 [submodule "3rdparty/eigen"]
 	path = 3rdparty/eigen
-	url = https://gitlab.com/libeigen/eigen.git
+	url = https://github.com/sailfishos-mirror/eigen.git
 [submodule "3rdparty/opencv"]
 	path = 3rdparty/opencv
 	url = https://github.com/opencv/opencv.git

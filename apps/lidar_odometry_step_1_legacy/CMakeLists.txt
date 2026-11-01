@@ -13,7 +13,6 @@ set(SOURCES
   lidar_odometry_gui.cpp
   ${STEP1_DIR}/lidar_odometry_utils.cpp
   ${STEP1_DIR}/lidar_odometry_utils_optimizers.cpp
-  ${STEP1_DIR}/run_report.cpp
   ${STEP1_DIR}/lidar_odometry.cpp
   ${STEP1_DIR}/points_global_spill.cpp
   ${STEP1_DIR}/raw_cloud_loader.cpp
@@ -56,6 +55,7 @@ target_include_directories(
 target_link_libraries(
           lidar_odometry_step_1_legacy
           PRIVATE
+          step1_run_report
           vqf
           Fusion
           unordered_dense::unordered_dense
@@ -84,7 +84,3 @@ if (MSVC)
 endif()
 
 hdmapping_install_app(lidar_odometry_step_1_legacy)
-
-if(WIN32)
-  target_link_libraries(lidar_odometry_step_1_legacy PRIVATE psapi pdh)
-endif()

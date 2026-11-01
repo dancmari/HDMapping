@@ -639,6 +639,7 @@ bool compute_step_1(
     const std::atomic<bool>& pause)
 {
     HDMAP_ZONE_SCOPE("compute_step_1");
+    ++params.initial_points_revision;
     int number_of_initial_points = 0;
     double timestamp_begin = 0.0;
 
@@ -1204,6 +1205,9 @@ void save_result(std::vector<WorkerData>& worker_data, LidarOdometryParams& para
 
 void filter_reference_buckets(LidarOdometryParams& params)
 {
+    std::scoped_lock lock(params.mutex_buckets_indoor, params.mutex_buckets_outdoor);
+    ++params.buckets_indoor_revision;
+    ++params.buckets_outdoor_revision;
     NDTBucketMapType reference_buckets_out;
     for (const auto& b : params.buckets_indoor)
     {
@@ -1265,6 +1269,10 @@ void save_trajectory_to_ascii(std::vector<WorkerData>& worker_data, std::string 
 
 void load_reference_point_clouds(const std::vector<std::string>& input_file_names, LidarOdometryParams& params)
 {
+    std::scoped_lock lock(params.mutex_buckets_indoor, params.mutex_buckets_outdoor);
+    ++params.buckets_indoor_revision;
+    ++params.buckets_outdoor_revision;
+    ++params.reference_points_revision;
     // params.reference_buckets.clear();
     params.buckets_indoor.clear();
     params.buckets_outdoor.clear();

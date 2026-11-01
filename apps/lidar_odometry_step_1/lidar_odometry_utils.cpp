@@ -612,6 +612,20 @@ std::vector<Point3Di> load_point_cloud(
     return points;
 }
 
+std::vector<LidarGap> find_lidar_gaps(const std::vector<Point3Di>& points, double min_gap_s)
+{
+    std::vector<LidarGap> gaps;
+    for (size_t i = 1; i < points.size(); i++)
+    {
+        const double length = points[i].timestamp - points[i - 1].timestamp;
+        if (length > min_gap_s)
+        {
+            gaps.push_back({ points[i - 1].timestamp, length });
+        }
+    }
+    return gaps;
+}
+
 std::unordered_map<int, std::string> MLvxCalib::GetIdToSnMapping(const std::string& filename)
 {
     if (!std::filesystem::exists(filename))

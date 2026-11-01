@@ -356,6 +356,19 @@ std::vector<Point3Di> load_point_cloud(
     double filter_threshold_xy_outer,
     const std::unordered_map<int, Eigen::Affine3d>& calibrations);
 
+//! A stretch of time without LiDAR points, in seconds.
+struct LidarGap
+{
+    double start;
+    double length;
+};
+
+//! Finds gaps in LiDAR data, e.g. a recording damaged by a hardware/firmware fault or by copying.
+//! @param points - points sorted by timestamp, as returned by @ref load_point_cloud after sorting
+//! @param min_gap_s - smallest gap to report, in seconds
+//! @return gaps longer than min_gap_s between consecutive points, in time order
+std::vector<LidarGap> find_lidar_gaps(const std::vector<Point3Di>& points, double min_gap_s);
+
 bool save_poses(const std::string& file_name, const std::vector<Eigen::Affine3d>& m_poses, const std::vector<std::string>& filenames);
 
 fs::path get_next_result_path(const std::string& working_directory);

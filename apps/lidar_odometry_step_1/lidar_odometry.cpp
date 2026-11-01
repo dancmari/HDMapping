@@ -43,6 +43,55 @@ static void write_calibration_validation(const fs::path& wdp, const std::vector<
         }
 }
 
+// Gaps in the LiDAR data longer than this are reported: odometry can fail on them, which then looks like a SLAM problem
+static constexpr double kLidarGapWarningS = 0.05;
+
+// Warns about gaps inside each file and between consecutive files (t_first/t_last are 0 for a file without
+// points). The first file is skipped, as its points are never used.
+static void report_lidar_gaps(
+    const std::vector<std::string>& files,
+    const std::vector<std::vector<LidarGap>>& gaps_in_file,
+    const std::vector<double>& t_first,
+    const std::vector<double>& t_last)
+{
+    std::vector<std::string> lines;
+    auto add_line = [&lines](const LidarGap& gap, const std::string& where)
+    {
+        std::ostringstream line;
+        line << std::fixed << std::setprecision(0) << gap.length * 1000.0 << " ms at t=" << std::setprecision(3) << gap.start << " s ("
+             << where << ")";
+        lines.push_back(line.str());
+    };
+
+    double previous_last = 0.0;
+    std::string previous_name;
+    for (size_t i = 1; i < gaps_in_file.size(); i++)
+    {
+        if (t_first[i] == 0.0 && t_last[i] == 0.0)
+            continue;
+
+        const std::string name = fs::path(files[i]).filename().string();
+        if (!previous_name.empty() && t_first[i] - previous_last > kLidarGapWarningS)
+            add_line({ previous_last, t_first[i] - previous_last }, "between " + previous_name + " and " + name);
+        for (const auto& gap : gaps_in_file[i])
+            add_line(gap, "in " + name);
+
+        previous_last = t_last[i];
+        previous_name = name;
+    }
+
+    if (lines.empty())
+        return;
+
+    constexpr size_t kMaxLines = 10;
+    std::cerr << "WARNING: " << lines.size() << " gap(s) longer than " << kLidarGapWarningS * 1000.0
+              << " ms in the LiDAR data, odometry may fail around them (damaged or incomplete recording?):\n";
+    for (size_t i = 0; i < std::min(lines.size(), kMaxLines); i++)
+        std::cerr << "WARNING:   " << lines[i] << "\n";
+    if (lines.size() > kMaxLines)
+        std::cerr << "WARNING:   ... and " << lines.size() - kMaxLines << " more\n";
+}
+
 bool load_data(
     std::vector<std::string>& input_file_names,
     LidarOdometryParams& params,
@@ -332,6 +381,7 @@ bool load_data(
             L.n.assign(minSize, 0);
             L.loaded.assign(minSize, 0);
             L.done.assign(minSize, 0);
+            std::vector<std::vector<LidarGap>> gaps_in_file(minSize);
             tbb::parallel_for(
                 size_t(1), // upstream clears the first file's cloud after loading: it is never used
                 minSize,
@@ -347,7 +397,9 @@ bool load_data(
                         L.t_first[i] = data.front().timestamp;
                         L.t_last[i] = data.back().timestamp;
                     }
+                    gaps_in_file[i] = find_lidar_gaps(data, kLidarGapWarningS);
                 });
+            report_lidar_gaps(L.files, gaps_in_file, L.t_first, L.t_last);
             if (params.save_calibration_validation && minSize > 0) // as the eager load: the first file, then dropped
                 write_calibration_validation(wdp, L.load(0), params);
             size_t totalPoints = 0;
@@ -358,6 +410,9 @@ bool load_data(
         }
 
         // --- Parallel load of LAZ files
+        std::vector<std::vector<LidarGap>> gaps_in_file(minSize);
+        std::vector<double> t_first(minSize, 0.0);
+        std::vector<double> t_last(minSize, 0.0);
         tbb::parallel_for(
             size_t(0),
             minSize,
@@ -380,9 +435,17 @@ bool load_data(
                 if ((i == 0) && params.save_calibration_validation)
                     write_calibration_validation(wdp, data, params);
 
+                if (!data.empty())
+                {
+                    t_first[i] = data.front().timestamp;
+                    t_last[i] = data.back().timestamp;
+                }
+                gaps_in_file[i] = find_lidar_gaps(data, kLidarGapWarningS);
+
                 // Store results
                 pointsPerFile[i] = std::move(data);
             });
+        report_lidar_gaps(laz_files, gaps_in_file, t_first, t_last);
 
         if (pointsPerFile.size() > 0)
             pointsPerFile.front().clear();

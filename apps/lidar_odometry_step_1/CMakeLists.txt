@@ -22,6 +22,7 @@ set(SOURCES
   lidar_odometry_utils_optimizers.cpp
   lidar_odometry.cpp lidar_odometry.h
   points_global_spill.h points_global_spill.cpp
+  run_report.h run_report.cpp
   raw_cloud_loader.h raw_cloud_loader.cpp
   toml_io.h toml_io.cpp
 )
@@ -149,3 +150,7 @@ endif()
 hdmapping_install_app(
   lidar_odometry_step_1
   drag_folder_with_mandeye_data_and_drop_here-precision_forestry)
+if(WIN32)
+  target_link_libraries(lidar_odometry_step_1 PRIVATE psapi pdh)
+  target_link_libraries(drag_folder_with_mandeye_data_and_drop_here-precision_forestry PRIVATE psapi pdh)
+endif()

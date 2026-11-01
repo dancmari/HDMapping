@@ -1,6 +1,7 @@
 #include "hdmapping_profiler.hpp"
 #include "lidar_odometry_utils.h"
 #include "points_global_spill.h"
+#include "run_report.h"
 #include <spdlog/spdlog.h>
 #include <spdlog/stopwatch.h>
 #include <tbb/combinable.h>
@@ -2410,11 +2411,17 @@ bool compute_step_2(
     bool debugMsg,
     std::atomic<bool>& parked)
 {
+    RunReport::Scope timing(params.run_report.get(), RunReport::Stage::Odometry);
     try
     {
-        return compute_step_2_impl(worker_data, params, ts_failure, loProgress, pause, debugMsg, parked);
+        const bool success = compute_step_2_impl(worker_data, params, ts_failure, loProgress, pause, debugMsg, parked);
+        if (!success && params.run_report)
+            params.run_report->fail("Odometry failed");
+        return success;
     } catch (const std::runtime_error& e) // a points_global spill I/O failure; its files are already removed
     {
+        if (params.run_report)
+            params.run_report->fail(e.what());
         spdlog::error("{}", e.what());
         return false;
     }
@@ -2463,6 +2470,8 @@ static bool compute_step_2_impl(
             {
                 if (params.publish_trajectory)
                     params.publish_trajectory(worker_data, true);
+                if (params.run_report)
+                    params.run_report->pause(true);
                 parked.store(true);
                 while (pause)
                 {
@@ -2470,6 +2479,8 @@ static bool compute_step_2_impl(
                     std::this_thread::sleep_for(std::chrono::seconds(1));
                 }
                 parked.store(false);
+                if (params.run_report)
+                    params.run_report->pause(false);
             }
 
             spdlog::stopwatch stopwatch_worker_process_worker_step_1;
